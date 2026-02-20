@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,12 +21,17 @@ import java.util.stream.Collectors;
 
 public class TabelaTarifariaService {
 
+    private static final Set<String> CATEGORIAS_OBRIGATORIAS = Set.of(
+            "COMERCIAL", "INDUSTRIAL", "PARTICULAR", "PUBLICO");
+
     private final TabelaTarifariaRepository tabelaTarifariaRepository;
 
     // Cria uma nova tabela tarifaria completa com categorias e faixas.
     @Transactional
 
     public TabelaTarifariaResponse criar(TabelaTarifariaRequest request) {
+        validarCategoriasObrigatorias(request.getCategorias());
+
         TabelaTarifaria tabela = TabelaTarifaria.builder()
                 .nome(request.getNome())
                 .dataVigencia(request.getDataVigencia())
@@ -117,6 +123,45 @@ public class TabelaTarifariaService {
     }
 
     // METODOS DE VALIDACAO
+    
+    private void validarCategoriasObrigatorias(List<CategoriaRequest> categorias) {
+
+        if (categorias == null || categorias.isEmpty()) {
+            throw new BusinessException(
+                    "A tabela tarifaria deve conter exatamente as quatro categorias: "
+                            + "COMERCIAL, INDUSTRIAL, PARTICULAR, PUBLICO. Nenhuma categoria foi enviada.");
+        }
+
+        Set<String> recebidas = categorias.stream()
+                .map(c -> c.getCategoria().toUpperCase().trim())
+                .collect(Collectors.toSet());
+
+        if (recebidas.size() != 4) {
+            throw new BusinessException(
+                    "A tabela tarifaria deve conter exatamente as quatro categorias: "
+                            + "COMERCIAL, INDUSTRIAL, PARTICULAR, PUBLICO. "
+                            + "Foram enviadas " + categorias.size() + " categoria(s).");
+        }
+
+        if (!CATEGORIAS_OBRIGATORIAS.equals(recebidas)) {
+            Set<String> faltando = CATEGORIAS_OBRIGATORIAS.stream()
+                    .filter(c -> !recebidas.contains(c))
+                    .collect(Collectors.toSet());
+            Set<String> invalidas = recebidas.stream()
+                    .filter(c -> !CATEGORIAS_OBRIGATORIAS.contains(c))
+                    .collect(Collectors.toSet());
+            StringBuilder msg = new StringBuilder(
+                    "A tabela tarifaria deve conter exatamente as quatro categorias: "
+                            + "COMERCIAL, INDUSTRIAL, PARTICULAR, PUBLICO. ");
+            if (!faltando.isEmpty()) {
+                msg.append("Faltando: ").append(String.join(", ", faltando)).append(". ");
+            }
+            if (!invalidas.isEmpty()) {
+                msg.append("Categoria(s) invalida(s): ").append(String.join(", ", invalidas)).append(".");
+            }
+            throw new BusinessException(msg.toString().trim());
+        }
+    }
         
     private void validarFaixas(List<FaixaRequest> faixas, String categoriaNome) {
         if (faixas == null || faixas.isEmpty()) {
